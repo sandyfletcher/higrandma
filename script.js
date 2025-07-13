@@ -40,7 +40,7 @@ chatForm.addEventListener('submit', async (e) => {
 
     try {
         // 3. Send the user's message to our backend server
-        const response = await fetch('https://higrandma.onrender.com', {
+        const response = await fetch('https://higrandma.onrender.com/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
