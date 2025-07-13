@@ -5,3 +5,6 @@
 
 # To ignore the large folder of downloaded packages
 node_modules
+
+# To ignore log files
+logs

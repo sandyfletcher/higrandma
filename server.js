@@ -1,58 +1,108 @@
 // server.js
 
-// 1. Load all our necessary packages
+// --- Core Imports ---
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import cors from 'cors';
 
-// 2. Configure our application
-dotenv.config(); // Load environment variables from .env file
-const app = express();
-const port = 3000; // The port our server will run on
+// --- Safety & Logging Imports ---
+import rateLimit from 'express-rate-limit';
+import winston from 'winston';
+import 'winston-daily-rotate-file'; // Necessary for the DailyRotateFile transport
 
-// 3. Set up middleware
-app.use(cors()); // Allow requests from our frontend
-app.use(express.json()); // Allow our server to receive JSON data
-
-// 4. Initialize the Google Generative AI model
-// This is where we use our secret API key
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-
-// 5. Define the API endpoint
-// 'app.post' means we are creating an endpoint that accepts POST requests
-// '/chat' is the name of our endpoint
-app.post('/chat', async (req, res) => {
-    try {
-        const userMessage = req.body.message;
-        // 1. Create a "system instruction" for the AI
-        const systemInstruction = `
-            You are a very kind, patient, and knowledgeable assistant for my grandmother. 
-            Your name is "Grandma's Helper".
-            Always answer in simple, clear, and encouraging language. 
-            Keep your answers concise and easy to understand.
-            If she asks about a person, place, or event, give a brief, interesting summary.
-            IMPORTANT: My grandmother sometimes misspells words. If you detect a spelling mistake,
-            do not point it out. Instead, understand what she meant and answer her question
-            as if she had spelled it perfectly. Your main goal is to be helpful and warm.
-        `;
-
-        // 2. Send both the system instruction and the user's message to the API
-        const result = await model.generateContent([systemInstruction, userMessage]);
-        const response = await result.response;
-        const text = response.text();
-
-        res.json({ message: text });
-
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Something went wrong!' });
-    }
+// --- Logger Configuration ---
+// This sets up our new logger
+const logger = winston.createLogger({
+  level: 'info', // Log 'info' level messages and above (info, warn, error)
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    // Transport 1: Log to the console
+    // This is for real-time viewing on the Render dashboard
+    new winston.transports.Console({
+      format: winston.format.simple(),
+    }),
+    // Transport 2: Log to a new file each day
+    // This creates our archive
+    new winston.transports.DailyRotateFile({
+      filename: 'logs/%DATE%-application.log', // Filename pattern
+      datePattern: 'YYYY-MM-DD', // Daily rotation
+      zippedArchive: true, // Compress old log files
+      maxSize: '20m', // Max size of a log file before it's rotated
+      maxFiles: '14d', // Keep logs for 14 days
+    }),
+  ],
 });
 
-// 6. Start the server
+// --- Application Setup ---
+dotenv.config();
+const app = express();
+const port = 3000;
+
+// Tell Express to trust the IP address passed by Render's proxy
+app.set('trust proxy', 1);
+
+// --- Middleware ---
+
+// Rate Limiter: Protects against abuse and high costs
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 25, // Limit each IP to 25 requests per window
+  message: "You have made too many requests. Please wait a little while.",
+});
+app.use(limiter);
+
+// CORS: Allows your frontend to talk to this backend
+// (Assuming you have a corsOptions variable defined as we discussed)
+// const corsOptions = { ... };
+// app.use(cors(corsOptions));
+app.use(cors()); // Use a simpler setup if you're not having issues
+
+// JSON Parser: Allows the server to read JSON from requests
+app.use(express.json());
+
+// --- Gemini AI Model Setup ---
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
+
+// --- API Endpoint ---
+app.post('/chat', async (req, res) => {
+  try {
+    const userIP = req.ip;
+    const userMessage = req.body.message;
+
+    logger.info(`Request from IP: ${userIP} | Query: "${userMessage}"`);
+
+    const systemInstruction = `
+        You are a very kind, patient, and knowledgeable assistant for my grandmother. 
+        Your name is "Grandma's Helper".
+        Always answer in simple, clear, and encouraging language. 
+        Keep your answers concise and easy to understand.
+        If she asks about a person, place, or event, give a brief, interesting summary.
+        IMPORTANT: My grandmother sometimes misspells words. If you detect a spelling mistake,
+        do not point it out. Instead, understand what she meant and answer her question
+        as if she had spelled it perfectly. Your main goal is to be helpful and warm.
+    `;
+
+    const result = await model.generateContent([systemInstruction, userMessage]);
+    const response = await result.response;
+    const text = response.text();
+
+    logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 500)}..."`);
+    // We log a substring to keep the logs from getting excessively long.
+
+    res.json({ message: text });
+
+  } catch (error) {
+    logger.error('API Error:', { errorMessage: error.message, stack: error.stack, ip: req.ip });
+    res.status(500).json({ error: 'Something went wrong!' });
+  }
+});
+
+// --- Start Server ---
 app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-    console.log('You can now open index.html in your browser and start chatting!');
+  logger.info(`Server is running on http://localhost:${port}`);
 });
