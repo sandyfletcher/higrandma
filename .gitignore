@@ -1,0 +1,7 @@
+# .gitignore file
+
+# To keep our secret key safe
+.env
+
+# To ignore the large folder of downloaded packages
+node_modules
