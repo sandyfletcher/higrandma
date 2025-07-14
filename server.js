@@ -99,36 +99,31 @@ const model = genAI.getGenerativeModel({
 app.post('/chat', async (req, res) => {
   try {
     const userIP = req.ip;
-    const { message: userMessage, history = [] } = req.body;
+    
+    // --- MODIFICATION 1: Expect a single 'conversation' array ---
+    const { conversation = [] } = req.body;
 
-    if (!userMessage || typeof userMessage !== 'string') {
-        logger.warn(`Invalid request received from IP: ${userIP}`);
-        return res.status(400).json({ error: 'Invalid message provided.' });
+    if (!conversation || conversation.length === 0) {
+        logger.warn(`Empty or invalid conversation from IP: ${userIP}`);
+        return res.status(400).json({ error: 'Invalid conversation provided.' });
     }
 
-    logger.info(`Request from IP: ${userIP} | Query: "${userMessage}"`);
+    const lastUserMessage = conversation[conversation.length - 1]?.message || '[No message found]';
+    logger.info(`Request from IP: ${userIP} | Final Query: "${lastUserMessage}"`);
 
-    // ====================================================================
-    // --- REVISION 3: Refactor the Chat Logic ---
-    // This new logic uses the SDK's built-in chat history management. It's
-    // cleaner and the intended way to hold a conversation.
-    // ====================================================================
-    
-    // First, we must format the history from our frontend to match what the SDK expects.
-    // Frontend sends: { role: 'user', message: '...' }
-    // SDK expects:   { role: 'user', parts: [{ text: '...' }] }
-    const formattedHistory = history.slice(-10).map(item => ({
+    // --- MODIFICATION 2: Use the simpler, stateless `generateContent` method ---
+
+    // Format the entire history our client sent into the format the SDK expects.
+    const formattedConversation = conversation.slice(-10).map(item => ({
         role: item.role,
         parts: [{ text: item.message }]
     }));
-
-    // Start a new chat session with the model, providing the past conversation.
-    const chat = model.startChat({
-        history: formattedHistory,
+    
+    // Use `generateContent` for sending a complete prompt (including history) in a single call.
+    const result = await model.generateContent({
+        contents: formattedConversation,
     });
     
-    // Send only the user's *newest* message to continue the conversation.
-    const result = await chat.sendMessage(userMessage);
     const response = await result.response;
     const text = response.text();
 

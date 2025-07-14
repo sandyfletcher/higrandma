@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// --- Original Chat Logic (Unchanged) ---
+// --- Chat Logic ---
 
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
@@ -100,16 +100,15 @@ chatForm.addEventListener('submit', async (e) => {
     chatInput.value = '';
 
     try {
-        // 3. Send the user's message AND the history to our backend server
+        // 3. Send the FULL conversation history to our backend server
         const response = await fetch('https://higrandma.onrender.com/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            // Send the history along with the new message
+            // Send the entire 'conversationHistory' array in a single object.
             body: JSON.stringify({ 
-                message: userMessage,
-                history: conversationHistory.slice(0, -1) // Send history *before* this new message
+                conversation: conversationHistory 
             }),
         });
 
@@ -121,19 +120,17 @@ chatForm.addEventListener('submit', async (e) => {
 
         const data = await response.json();
         
-        // --- MODIFICATION START ---
         // 4a. Format the raw message from Gemini into HTML
         const formattedMessage = formatMessage(data.message);
         
         // 4b. Use .innerHTML to render the formatted message
         loadingMessageElement.innerHTML = formattedMessage;
         loadingMessageElement.classList.remove('loading');
-        // --- MODIFICATION END ---
         
         // 4c. Add the AI's RAW (unformatted) response to our history array
         conversationHistory.push({ role: 'model', message: data.message });
 
-        // 4d. Enforce the 5-query limit (5 queries + 5 responses = 10 items)
+        // 4d. Enforce the history limit (5 queries + 5 responses = 10 items)
         if (conversationHistory.length > 10) {
             // Remove the oldest two items (one user query, one model response)
             conversationHistory.splice(0, 2);
