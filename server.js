@@ -129,9 +129,12 @@ app.post('/chat', async (req, res) => {
         ...formattedHistory
     ];
 
-    const result = await model.generateContent({
-        contents: completePrompt,
-    });
+    // ====================================================================
+    // =========== THE FIX IS HERE ========================================
+    // Pass the `completePrompt` array directly to `generateContent`.
+    // Do NOT wrap it in `{ contents: ... }`.
+    // ====================================================================
+    const result = await model.generateContent(completePrompt);
     
     const response = await result.response;
     const text = response.text();
