@@ -1,4 +1,4 @@
-// server.js (Corrected for New Stateful Version)
+// server.js (Final Corrected Version)
 
 // --- Core Imports ---
 import express from 'express';
@@ -9,7 +9,7 @@ import cors from 'cors';
 // --- Safety & Logging Imports ---
 import rateLimit from 'express-rate-limit';
 import winston from 'winston';
-import 'winston-daily-rotate-file'; // Necessary for the DailyRotateFile transport
+import 'winston-daily-rotate-file';
 
 // --- Logger Configuration ---
 const logger = winston.createLogger({
@@ -48,6 +48,7 @@ app.get('/', (req, res) => {
 });
 
 // --- System Instruction ---
+// This object defines the AI's personality. It's kept separate.
 const systemInstruction = {
     role: "system",
     parts: [{ text: `
@@ -65,7 +66,10 @@ const systemInstruction = {
 
 // --- Gemini AI Model Setup ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-pro-latest"
+    // We do NOT pass the system instruction here, we'll do it in the request.
+});
 
 // --- API Endpoint ---
 app.post('/chat', async (req, res) => {
@@ -81,31 +85,34 @@ app.post('/chat', async (req, res) => {
     const lastUserMessage = conversation[conversation.length - 1]?.message || '[No message found]';
     logger.info(`Request from IP: ${userIP} | Query: "${lastUserMessage}"`);
 
+    // Format the history from the client into the structure the API needs.
+    // This part is correct.
     const formattedHistory = conversation.map(item => ({
         role: item.role,
         parts: [{ text: item.message }]
     }));
 
-    const completePrompt = [
-        systemInstruction,
-        ...formattedHistory
-    ];
-
-    // ================= THE FIX ===================
-    // Pass the prompt array DIRECTLY to the function.
-    // Do NOT wrap it in an object like `{ contents: ... }`.
-    const result = await model.generateContent(completePrompt);
-    // =============================================
+    // ====================================================================
+    // ======================== THE DEFINITIVE FIX ========================
+    // ====================================================================
+    // We pass an OBJECT to generateContent.
+    // The `systemInstruction` gets its own top-level key.
+    // The `contents` key holds the array of user/model chat history.
+    // This prevents the "Unknown name 'role' at contents[0]..." error.
+    const result = await model.generateContent({
+        contents: formattedHistory,
+        systemInstruction: systemInstruction,
+    });
     
     const response = await result.response;
     const text = response.text();
 
-    logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 70)}..."`);
+    logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 100)}..."`);
     res.json({ message: text });
 
   } catch (error) {
     logger.error('API Error:', { errorMessage: error.message, stack: error.stack, ip: req.ip });
-    res.status(500).json({ error: 'Something went wrong!' });
+    res.status(500).json({ error: 'Something went wrong on the server!' });
   }
 });
 
