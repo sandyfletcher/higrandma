@@ -56,10 +56,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // CORS: Allows your frontend to talk to this backend
-// (Assuming you have a corsOptions variable defined as we discussed)
-// const corsOptions = { ... };
-// app.use(cors(corsOptions));
-app.use(cors()); // Use a simpler setup if you're not having issues
+app.use(cors());
 
 // JSON Parser: Allows the server to read JSON from requests
 app.use(express.json());
@@ -72,7 +69,14 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
 app.post('/chat', async (req, res) => {
   try {
     const userIP = req.ip;
-    const userMessage = req.body.message;
+    // Destructure history and the new message from the request body
+    const { message: userMessage, history = [] } = req.body;
+
+    // Basic validation
+    if (!userMessage || typeof userMessage !== 'string') {
+        logger.warn(`Invalid request received from IP: ${userIP}`);
+        return res.status(400).json({ error: 'Invalid message provided.' });
+    }
 
     logger.info(`Request from IP: ${userIP} | Query: "${userMessage}"`);
 
@@ -87,7 +91,21 @@ app.post('/chat', async (req, res) => {
         as if she had spelled it perfectly. Your main goal is to be helpful and warm.
     `;
 
-    const result = await model.generateContent([systemInstruction, userMessage]);
+    // Format the incoming history for the Gemini API
+    // We also enforce the limit on the backend as a safety measure
+    const formattedHistory = history.slice(-10).map(item => ({
+        role: item.role, // 'user' or 'model'
+        parts: [{ text: item.message }]
+    }));
+
+    // Construct the full payload for the model
+    const fullPrompt = [
+        systemInstruction,
+        ...formattedHistory, // Spread the formatted history items
+        userMessage         // The latest message from the user
+    ];
+
+    const result = await model.generateContent(fullPrompt);
     const response = await result.response;
     const text = response.text();
 
