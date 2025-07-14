@@ -39,7 +39,7 @@ const logger = winston.createLogger({
 // --- Application Setup ---
 dotenv.config();
 const app = express();
-const port = process.env.PORT || 3000; // Use Render's port
+const port = process.env.PORT || 3000; // Use Render's port, fallback to 3000
 
 // Tell Express to trust the IP address passed by Render's proxy
 app.set('trust proxy', 1);
@@ -60,16 +60,21 @@ app.use(cors());
 // JSON Parser: Allows the server to read JSON from requests
 app.use(express.json());
 
+// ====================================================================
+// --- FIX #1: Add a Root Route for "Cannot GET /" ---
+// This gives a friendly message if someone visits the API URL directly.
+// ====================================================================
+app.get('/', (req, res) => {
+    res.send("Hi Grandma! The chat server is running. Use the frontend to chat.");
+});
+
 
 // ====================================================================
-// --- REVISION 1: Define System Instruction Globally ---
-// By defining the instructions here, we only do it once, and it's clear
-// what the model's core purpose is. This is our improved prompt.
+// --- REVISION: Define System Instruction as a standalone object ---
+// This is the persona for our AI.
 // ====================================================================
-
-// --- FIX: The systemInstruction should be an array of "Part" objects, not a "Content" object with a "role". ---
-// The property "systemInstruction" itself implies the role.
 const systemInstruction = {
+    role: "system",
     parts: [{ text: `
         You are "Grandma's Helper," a friendly and patient AI assistant. 
         You are speaking directly to my grandmother. Your goal is to make technology and the world feel accessible and interesting to her.
@@ -87,13 +92,11 @@ const systemInstruction = {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ====================================================================
-// --- REVISION 2: Use the System Instruction during Model Initialization ---
-// We pass our instructions to the model right when we create it.
-// This is the recommended method from Google for setting a model's persona.
+// --- FIX #2: Initialize the model WITHOUT the systemInstruction ---
+// We will add the instruction manually to each request to avoid SDK conflicts.
 // ====================================================================
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-pro-latest",
-    systemInstruction: systemInstruction, 
+    model: "gemini-2.5-pro-latest"
 });
 
 
@@ -101,7 +104,6 @@ const model = genAI.getGenerativeModel({
 app.post('/chat', async (req, res) => {
   try {
     const userIP = req.ip;
-    
     const { conversation = [] } = req.body;
 
     if (!conversation || conversation.length === 0) {
@@ -112,12 +114,24 @@ app.post('/chat', async (req, res) => {
     const lastUserMessage = conversation[conversation.length - 1]?.message || '[No message found]';
     logger.info(`Request from IP: ${userIP} | Final Query: "${lastUserMessage}"`);
 
-    const formattedConversation = conversation.slice(-10).map(item => ({
+    // Format the history from the client
+    const formattedHistory = conversation.slice(-10).map(item => ({
         role: item.role,
         parts: [{ text: item.message }]
     }));
-    
-    const result = await model.generateContent(formattedConversation);
+
+    // ====================================================================
+    // --- FIX #2 (continued): Manually combine system instruction and history ---
+    // This creates a complete, explicit request every time.
+    // ====================================================================
+    const completePrompt = [
+        systemInstruction,
+        ...formattedHistory
+    ];
+
+    const result = await model.generateContent({
+        contents: completePrompt,
+    });
     
     const response = await result.response;
     const text = response.text();
