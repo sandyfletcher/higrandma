@@ -119,10 +119,11 @@ app.post('/chat', async (req, res) => {
         parts: [{ text: item.message }]
     }));
     
-    // Use `generateContent` for sending a complete prompt (including history) in a single call.
-    const result = await model.generateContent({
-        contents: formattedConversation,
-    });
+    // ====================================================================
+    // --- FIX: Pass the history array DIRECTLY to generateContent ---
+    // The SDK handles wrapping the array in the required request object for you.
+    // ====================================================================
+    const result = await model.generateContent(formattedConversation);
     
     const response = await result.response;
     const text = response.text();
