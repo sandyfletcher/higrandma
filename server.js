@@ -65,7 +65,7 @@ const systemInstruction = { // this defines the AI's personality and is kept sep
 // --- Gemini AI Model Setup ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-pro-latest"
+    model: "gemini-2.5-pro"
 });
 
 // --- API Endpoint ---
