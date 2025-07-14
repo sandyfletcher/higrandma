@@ -1,4 +1,4 @@
-// server.js
+// server.js (Corrected for New Stateful Version)
 
 // --- Core Imports ---
 import express from 'express';
@@ -13,19 +13,10 @@ import 'winston-daily-rotate-file'; // Necessary for the DailyRotateFile transpo
 
 // --- Logger Configuration ---
 const logger = winston.createLogger({
-  level: 'info', // Log 'info' level messages and above (info, warn, error)
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
+  level: 'info',
+  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
   transports: [
-    // Transport 1: Log to the console
-    // This is for real-time viewing on the Render dashboard
-    new winston.transports.Console({
-      format: winston.format.simple(),
-    }),
-    // Transport 2: Log to a new file each day
-    // This creates our archive
+    new winston.transports.Console({ format: winston.format.simple() }),
     new winston.transports.DailyRotateFile({
       filename: 'logs/%DATE%-application.log',
       datePattern: 'YYYY-MM-DD',
@@ -39,40 +30,24 @@ const logger = winston.createLogger({
 // --- Application Setup ---
 dotenv.config();
 const app = express();
-const port = process.env.PORT || 3000; // Use Render's port, fallback to 3000
-
-// Tell Express to trust the IP address passed by Render's proxy
+const port = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // --- Middleware ---
-
-// Rate Limiter: Protects against abuse and high costs
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 25, // Limit each IP to 25 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 25,
   message: "You have made too many requests. Please wait a little while.",
 });
 app.use(limiter);
-
-// CORS: Allows your frontend to talk to this backend
 app.use(cors());
-
-// JSON Parser: Allows the server to read JSON from requests
 app.use(express.json());
 
-// ====================================================================
-// --- FIX #1: Add a Root Route for "Cannot GET /" ---
-// This gives a friendly message if someone visits the API URL directly.
-// ====================================================================
 app.get('/', (req, res) => {
     res.send("Hi Grandma! The chat server is running. Use the frontend to chat.");
 });
 
-
-// ====================================================================
-// --- REVISION: Define System Instruction as a standalone object ---
-// This is the persona for our AI.
-// ====================================================================
+// --- System Instruction ---
 const systemInstruction = {
     role: "system",
     parts: [{ text: `
@@ -90,15 +65,7 @@ const systemInstruction = {
 
 // --- Gemini AI Model Setup ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// ====================================================================
-// --- FIX #2: Initialize the model WITHOUT the systemInstruction ---
-// We will add the instruction manually to each request to avoid SDK conflicts.
-// ====================================================================
-const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-pro-latest"
-});
-
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
 
 // --- API Endpoint ---
 app.post('/chat', async (req, res) => {
@@ -107,39 +74,33 @@ app.post('/chat', async (req, res) => {
     const { conversation = [] } = req.body;
 
     if (!conversation || conversation.length === 0) {
-        logger.warn(`Empty or invalid conversation from IP: ${userIP}`);
+        logger.warn(`Empty conversation from IP: ${userIP}`);
         return res.status(400).json({ error: 'Invalid conversation provided.' });
     }
 
     const lastUserMessage = conversation[conversation.length - 1]?.message || '[No message found]';
-    logger.info(`Request from IP: ${userIP} | Final Query: "${lastUserMessage}"`);
+    logger.info(`Request from IP: ${userIP} | Query: "${lastUserMessage}"`);
 
-    // Format the history from the client
-    const formattedHistory = conversation.slice(-10).map(item => ({
+    const formattedHistory = conversation.map(item => ({
         role: item.role,
         parts: [{ text: item.message }]
     }));
 
-    // ====================================================================
-    // --- FIX #2 (continued): Manually combine system instruction and history ---
-    // This creates a complete, explicit request every time.
-    // ====================================================================
     const completePrompt = [
         systemInstruction,
         ...formattedHistory
     ];
 
-    // ====================================================================
-    // =========== THE FIX IS HERE ========================================
-    // Pass the `completePrompt` array directly to `generateContent`.
-    // Do NOT wrap it in `{ contents: ... }`.
-    // ====================================================================
+    // ================= THE FIX ===================
+    // Pass the prompt array DIRECTLY to the function.
+    // Do NOT wrap it in an object like `{ contents: ... }`.
     const result = await model.generateContent(completePrompt);
+    // =============================================
     
     const response = await result.response;
     const text = response.text();
 
-    logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 500)}..."`);
+    logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 70)}..."`);
     res.json({ message: text });
 
   } catch (error) {

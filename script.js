@@ -1,30 +1,18 @@
+// script.js (Corrected for New Stateful Version)
+
 // --- Font Size Slider Logic ---
 document.addEventListener('DOMContentLoaded', () => {
     const slider = document.getElementById('font-size-slider');
-    const root = document.documentElement; // The <html> element
-
-    // Function to apply the font size to the root element
-    const applyFontSize = (size) => {
-        root.style.fontSize = `${size}px`;
-    };
-
-    // Function to save the user's preference to their browser's storage
-    const saveFontSize = (size) => {
-        localStorage.setItem('grandmaChatFontSize', size);
-    };
-
-    // On page load, check for a saved setting
+    const root = document.documentElement;
+    const applyFontSize = (size) => { root.style.fontSize = `${size}px`; };
+    const saveFontSize = (size) => { localStorage.setItem('grandmaChatFontSize', size); };
     const savedSize = localStorage.getItem('grandmaChatFontSize');
     if (savedSize) {
-        // If a size was saved, apply it and set the slider's position
         slider.value = savedSize;
         applyFontSize(savedSize);
     } else {
-        // Otherwise, use the default size from the HTML
         applyFontSize(slider.value);
     }
-
-    // Add an event listener for when the slider value changes
     slider.addEventListener('input', (e) => {
         const newSize = e.target.value;
         applyFontSize(newSize);
@@ -32,88 +20,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-
 // --- Chat Logic ---
-
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatContainer = document.getElementById('chat-container');
 
-// This array will store our conversation history.
-// Each item will be an object like { role: 'user' or 'model', message: '...' }
 let conversationHistory = [];
 
-/**
- * Converts basic Markdown (bold, italics) and newlines to HTML.
- * @param {string} text The raw text from the API.
- * @returns {string} The formatted HTML string.
- */
 function formatMessage(text) {
-    // Convert **bold** to <strong>bold</strong>
     let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    // Convert *italic* to <em>italic</em>
     formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    
-    // Convert newlines (\n) to <br> tags for proper line breaks
     formattedText = formattedText.replace(/\n/g, '<br>');
-    
     return formattedText;
 }
 
-// This function adds a message to the chat container
-function addMessage(sender, message) {
+// This function now handles adding formatted messages to the chat
+function addMessage(sender, message, isFormatted = false) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('chat-message', `${sender}-message`);
-    
-    // Simple check for loading message
-    if (sender === 'gemini' && message === '...') {
-        messageElement.classList.add('loading');
-        // Let's change the name to the one we defined in the prompt
-        messageElement.textContent = "Grandma's Helper is thinking...";
+
+    // If the message is already HTML, use .innerHTML. Otherwise, use .textContent.
+    if (isFormatted) {
+        messageElement.innerHTML = message;
     } else {
-        // For actual messages, we set the text content. Formatting will be handled later.
         messageElement.textContent = message;
     }
-    
+
     chatContainer.appendChild(messageElement);
-    chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to the bottom
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return messageElement; // Return the element so we can update it
 }
 
 // Handle form submission
 chatForm.addEventListener('submit', async (e) => {
-    e.preventDefault(); // Prevent the page from reloading
-
+    e.preventDefault();
     const userMessage = chatInput.value.trim();
-    if (!userMessage) return; // Don't send empty messages
+    if (!userMessage) return;
 
-    // 1a. Add the user's message to the visible chat
-    addMessage('user', userMessage);
-    // 1b. Add the user's message to our history array
+    // 1a. Add the user's message to the visible chat (unformatted for now)
+    const userMessageElement = addMessage('user', userMessage);
+    // 1b. Add the raw user message to history
     conversationHistory.push({ role: 'user', message: userMessage });
-    
-    // 2. Add a loading indicator for Gemini's response
-    addMessage('gemini', '...');
-    const loadingMessageElement = chatContainer.lastChild;
 
-    // Clear the input field
+    // 2. Add a loading indicator for Gemini's response
+    const loadingMessageElement = addMessage('gemini', "Grandma's Helper is thinking...");
+    loadingMessageElement.classList.add('loading');
+
     chatInput.value = '';
 
     try {
-        // 3. Send the FULL conversation history to our backend server
         const response = await fetch('https://higrandma.onrender.com/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            // Send the entire 'conversationHistory' array in a single object.
-            body: JSON.stringify({ 
-                conversation: conversationHistory 
-            }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation: conversationHistory }),
         });
 
         if (!response.ok) {
-            // Try to get a more specific error from the backend
             const errorData = await response.json().catch(() => null);
             throw new Error(errorData?.message || 'Network response was not ok');
         }
@@ -121,18 +83,17 @@ chatForm.addEventListener('submit', async (e) => {
         const data = await response.json();
         
         // 4a. Format the raw message from Gemini into HTML
-        const formattedMessage = formatMessage(data.message);
+        const formattedGeminiMessage = formatMessage(data.message);
         
-        // 4b. Use .innerHTML to render the formatted message
-        loadingMessageElement.innerHTML = formattedMessage;
+        // 4b. Update the loading message with the formatted AI response
+        loadingMessageElement.innerHTML = formattedGeminiMessage;
         loadingMessageElement.classList.remove('loading');
         
-        // 4c. Add the AI's RAW (unformatted) response to our history array
+        // 4c. Add the AI's RAW (unformatted) response to our history
         conversationHistory.push({ role: 'model', message: data.message });
 
-        // 4d. Enforce the history limit (5 queries + 5 responses = 10 items)
+        // 4d. Enforce history limit (e.g., last 5 pairs = 10 messages)
         if (conversationHistory.length > 10) {
-            // Remove the oldest two items (one user query, one model response)
             conversationHistory.splice(0, 2);
         }
 
