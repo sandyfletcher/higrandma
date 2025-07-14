@@ -92,10 +92,13 @@ app.post('/chat', async (req, res) => {
         systemInstruction: systemInstruction,
     });
     const response = await result.response;
-    const text = response.text();
-    logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 100)}..."`);
-    res.json({ message: text });
+    let text = response.text(); // <--- AI's raw response, use let instead of const
+    // --- FIX: Sanitize the response by upgrading HTTP links to HTTPS ---
+    const sanitizedText = text.replace(/http:\/\//g, 'https://');
+    logger.info(`Response to IP: ${req.ip} | Answer: "${sanitizedText.substring(0, 100)}..."`);
+    res.json({ message: sanitizedText }); // <--- Send the CLEANED response
   } catch (error) {
+//...
     logger.error('API Error:', { errorMessage: error.message, stack: error.stack, ip: req.ip });
     res.status(500).json({ error: 'Something went wrong on the server!' });
   }
