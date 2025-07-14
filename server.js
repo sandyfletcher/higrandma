@@ -1,12 +1,11 @@
-// server.js (Final Corrected Version)
+// ==========================
+// server.js
+// ==========================
 
-// --- Core Imports ---
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import cors from 'cors';
-
-// --- Safety & Logging Imports ---
 import rateLimit from 'express-rate-limit';
 import winston from 'winston';
 import 'winston-daily-rotate-file';
@@ -42,14 +41,13 @@ const limiter = rateLimit({
 app.use(limiter);
 app.use(cors());
 app.use(express.json());
-
 app.get('/', (req, res) => {
-    res.send("Hi Grandma! The chat server is running. Use the frontend to chat.");
+    res.send("Server operational — use frontend to chat.");
 });
 
 // --- System Instruction ---
-// This object defines the AI's personality. It's kept separate.
-const systemInstruction = {
+const systemInstruction = { // this defines the AI's personality and is kept separate
+
     role: "system",
     parts: [{ text: `
         You are "Grandma's Helper," a friendly and patient AI assistant. 
@@ -67,8 +65,7 @@ const systemInstruction = {
 // --- Gemini AI Model Setup ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-pro-latest"
-    // We do NOT pass the system instruction here, we'll do it in the request.
+    model: "gemini-2.5-pro-latest"
 });
 
 // --- API Endpoint ---
@@ -76,40 +73,28 @@ app.post('/chat', async (req, res) => {
   try {
     const userIP = req.ip;
     const { conversation = [] } = req.body;
-
     if (!conversation || conversation.length === 0) {
         logger.warn(`Empty conversation from IP: ${userIP}`);
         return res.status(400).json({ error: 'Invalid conversation provided.' });
     }
-
     const lastUserMessage = conversation[conversation.length - 1]?.message || '[No message found]';
     logger.info(`Request from IP: ${userIP} | Query: "${lastUserMessage}"`);
-
-    // Format the history from the client into the structure the API needs.
-    // This part is correct.
+    // format conversation history into API-compatible structure
     const formattedHistory = conversation.map(item => ({
         role: item.role,
         parts: [{ text: item.message }]
     }));
-
-    // ====================================================================
-    // ======================== THE DEFINITIVE FIX ========================
-    // ====================================================================
-    // We pass an OBJECT to generateContent.
-    // The `systemInstruction` gets its own top-level key.
-    // The `contents` key holds the array of user/model chat history.
-    // This prevents the "Unknown name 'role' at contents[0]..." error.
+    // pass an OBJECT to generateContent, 
+    // `systemInstruction` gets its own top-level key
+    // `contents` key holds array of user/model chat history
     const result = await model.generateContent({
         contents: formattedHistory,
         systemInstruction: systemInstruction,
     });
-    
     const response = await result.response;
     const text = response.text();
-
     logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 100)}..."`);
     res.json({ message: text });
-
   } catch (error) {
     logger.error('API Error:', { errorMessage: error.message, stack: error.stack, ip: req.ip });
     res.status(500).json({ error: 'Something went wrong on the server!' });
