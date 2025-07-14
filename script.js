@@ -1,4 +1,39 @@
-// script.js
+// --- Font Size Slider Logic ---
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('font-size-slider');
+    const root = document.documentElement; // The <html> element
+
+    // Function to apply the font size to the root element
+    const applyFontSize = (size) => {
+        root.style.fontSize = `${size}px`;
+    };
+
+    // Function to save the user's preference to their browser's storage
+    const saveFontSize = (size) => {
+        localStorage.setItem('grandmaChatFontSize', size);
+    };
+
+    // On page load, check for a saved setting
+    const savedSize = localStorage.getItem('grandmaChatFontSize');
+    if (savedSize) {
+        // If a size was saved, apply it and set the slider's position
+        slider.value = savedSize;
+        applyFontSize(savedSize);
+    } else {
+        // Otherwise, use the default size from the HTML
+        applyFontSize(slider.value);
+    }
+
+    // Add an event listener for when the slider value changes
+    slider.addEventListener('input', (e) => {
+        const newSize = e.target.value;
+        applyFontSize(newSize);
+        saveFontSize(newSize);
+    });
+});
+
+
+// --- Original Chat Logic (Unchanged) ---
 
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');

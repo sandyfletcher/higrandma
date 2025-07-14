@@ -10,23 +10,28 @@
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-
     <header>
         <h1>Hi Grandma! 👋</h1>
         <p>What would you like to learn about today?</p>
+        <!-- Font Size Slider -->
+        <div class="settings-container">
+            <label id="font-size-slider-label" for="font-size-slider">Make Text Bigger or Smaller</label>
+            <div class="slider-wrapper">
+                <span class="font-size-icon small">A</span>
+                <input type="range" id="font-size-slider" min="14" max="24" value="16" step="1" aria-labelledby="font-size-slider-label">
+                <span class="font-size-icon large">A</span>
+            </div>
+        </div>
     </header>
-
     <main id="chat-container">
         <!-- Chat messages will be added here by JavaScript -->
     </main>
-
     <footer>
         <form id="chat-form">
             <input type="text" id="chat-input" placeholder="Type your question here..." autocomplete="off" required>
             <button type="submit">Ask</button>
         </form>
     </footer>
-
     <script src="script.js"></script>
 </body>
 </html>
