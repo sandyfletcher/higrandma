@@ -39,7 +39,7 @@ const logger = winston.createLogger({
 // --- Application Setup ---
 dotenv.config();
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000; // Use Render's port
 
 // Tell Express to trust the IP address passed by Render's proxy
 app.set('trust proxy', 1);
@@ -66,8 +66,10 @@ app.use(express.json());
 // By defining the instructions here, we only do it once, and it's clear
 // what the model's core purpose is. This is our improved prompt.
 // ====================================================================
+
+// --- FIX: The systemInstruction should be an array of "Part" objects, not a "Content" object with a "role". ---
+// The property "systemInstruction" itself implies the role.
 const systemInstruction = {
-    role: "system",
     parts: [{ text: `
         You are "Grandma's Helper," a friendly and patient AI assistant. 
         You are speaking directly to my grandmother. Your goal is to make technology and the world feel accessible and interesting to her.
@@ -100,7 +102,6 @@ app.post('/chat', async (req, res) => {
   try {
     const userIP = req.ip;
     
-    // --- MODIFICATION 1: Expect a single 'conversation' array ---
     const { conversation = [] } = req.body;
 
     if (!conversation || conversation.length === 0) {
@@ -111,18 +112,11 @@ app.post('/chat', async (req, res) => {
     const lastUserMessage = conversation[conversation.length - 1]?.message || '[No message found]';
     logger.info(`Request from IP: ${userIP} | Final Query: "${lastUserMessage}"`);
 
-    // --- MODIFICATION 2: Use the simpler, stateless `generateContent` method ---
-
-    // Format the entire history our client sent into the format the SDK expects.
     const formattedConversation = conversation.slice(-10).map(item => ({
         role: item.role,
         parts: [{ text: item.message }]
     }));
     
-    // ====================================================================
-    // --- FIX: Pass the history array DIRECTLY to generateContent ---
-    // The SDK handles wrapping the array in the required request object for you.
-    // ====================================================================
     const result = await model.generateContent(formattedConversation);
     
     const response = await result.response;
@@ -139,5 +133,5 @@ app.post('/chat', async (req, res) => {
 
 // --- Start Server ---
 app.listen(port, () => {
-  logger.info(`Server is running on http://localhost:${port}`);
+  logger.info(`Server is running on port: ${port}`);
 });
