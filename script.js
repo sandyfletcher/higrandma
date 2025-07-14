@@ -8,6 +8,24 @@ const chatContainer = document.getElementById('chat-container');
 // Each item will be an object like { role: 'user' or 'model', message: '...' }
 let conversationHistory = [];
 
+/**
+ * Converts basic Markdown (bold, italics) and newlines to HTML.
+ * @param {string} text The raw text from the API.
+ * @returns {string} The formatted HTML string.
+ */
+function formatMessage(text) {
+    // Convert **bold** to <strong>bold</strong>
+    let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Convert *italic* to <em>italic</em>
+    formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Convert newlines (\n) to <br> tags for proper line breaks
+    formattedText = formattedText.replace(/\n/g, '<br>');
+    
+    return formattedText;
+}
+
 // This function adds a message to the chat container
 function addMessage(sender, message) {
     const messageElement = document.createElement('div');
@@ -19,6 +37,7 @@ function addMessage(sender, message) {
         // Let's change the name to the one we defined in the prompt
         messageElement.textContent = "Grandma's Helper is thinking...";
     } else {
+        // For actual messages, we set the text content. Formatting will be handled later.
         messageElement.textContent = message;
     }
     
@@ -67,14 +86,19 @@ chatForm.addEventListener('submit', async (e) => {
 
         const data = await response.json();
         
-        // 4a. Update the loading message with the actual response
-        loadingMessageElement.textContent = data.message;
-        loadingMessageElement.classList.remove('loading');
+        // --- MODIFICATION START ---
+        // 4a. Format the raw message from Gemini into HTML
+        const formattedMessage = formatMessage(data.message);
         
-        // 4b. Add the AI's response to our history array
+        // 4b. Use .innerHTML to render the formatted message
+        loadingMessageElement.innerHTML = formattedMessage;
+        loadingMessageElement.classList.remove('loading');
+        // --- MODIFICATION END ---
+        
+        // 4c. Add the AI's RAW (unformatted) response to our history array
         conversationHistory.push({ role: 'model', message: data.message });
 
-        // 4c. Enforce the 5-query limit (5 queries + 5 responses = 10 items)
+        // 4d. Enforce the 5-query limit (5 queries + 5 responses = 10 items)
         if (conversationHistory.length > 10) {
             // Remove the oldest two items (one user query, one model response)
             conversationHistory.splice(0, 2);
