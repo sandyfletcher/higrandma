@@ -12,7 +12,6 @@ import winston from 'winston';
 import 'winston-daily-rotate-file'; // Necessary for the DailyRotateFile transport
 
 // --- Logger Configuration ---
-// This sets up our new logger
 const logger = winston.createLogger({
   level: 'info', // Log 'info' level messages and above (info, warn, error)
   format: winston.format.combine(
@@ -28,11 +27,11 @@ const logger = winston.createLogger({
     // Transport 2: Log to a new file each day
     // This creates our archive
     new winston.transports.DailyRotateFile({
-      filename: 'logs/%DATE%-application.log', // Filename pattern
-      datePattern: 'YYYY-MM-DD', // Daily rotation
-      zippedArchive: true, // Compress old log files
-      maxSize: '20m', // Max size of a log file before it's rotated
-      maxFiles: '14d', // Keep logs for 14 days
+      filename: 'logs/%DATE%-application.log',
+      datePattern: 'YYYY-MM-DD',
+      zippedArchive: true,
+      maxSize: '20m',
+      maxFiles: '14d',
     }),
   ],
 });
@@ -61,18 +60,47 @@ app.use(cors());
 // JSON Parser: Allows the server to read JSON from requests
 app.use(express.json());
 
+
+// ====================================================================
+// --- REVISION 1: Define System Instruction Globally ---
+// By defining the instructions here, we only do it once, and it's clear
+// what the model's core purpose is. This is our improved prompt.
+// ====================================================================
+const systemInstruction = {
+    role: "system",
+    parts: [{ text: `
+        You are "Grandma's Helper," a friendly and patient AI assistant. 
+        You are speaking directly to my grandmother. Your goal is to make technology and the world feel accessible and interesting to her.
+
+        **Your Personality & Rules:**
+        1.  **Warm and Encouraging:** Always be positive. Start your answers with a friendly opening like "That's a great question!" or "Of course!".
+        2.  **Simple Language:** Explain things in the simplest terms possible. Avoid technical jargon completely. Use analogies related to everyday life (like gardening, cooking, or knitting) if it helps explain a concept.
+        3.  **Patient with Typos:** My grandmother may misspell words. NEVER point out her spelling mistakes or correct her. Simply understand her intent and answer the question as if it were spelled perfectly. This is very important.
+        4.  **Concise Answers:** Keep your paragraphs short (2-3 sentences). Use bullet points or numbered lists to break down information and make it easier to read.
+        5.  **Use Bolding:** Use **bold text** to highlight the most important words or names in your answer to help them stand out.
+    `}],
+};
+
 // --- Gemini AI Model Setup ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
+
+// ====================================================================
+// --- REVISION 2: Use the System Instruction during Model Initialization ---
+// We pass our instructions to the model right when we create it.
+// This is the recommended method from Google for setting a model's persona.
+// ====================================================================
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-pro-latest",
+    systemInstruction: systemInstruction, 
+});
+
 
 // --- API Endpoint ---
 app.post('/chat', async (req, res) => {
   try {
     const userIP = req.ip;
-    // Destructure history and the new message from the request body
     const { message: userMessage, history = [] } = req.body;
 
-    // Basic validation
     if (!userMessage || typeof userMessage !== 'string') {
         logger.warn(`Invalid request received from IP: ${userIP}`);
         return res.status(400).json({ error: 'Invalid message provided.' });
@@ -80,38 +108,31 @@ app.post('/chat', async (req, res) => {
 
     logger.info(`Request from IP: ${userIP} | Query: "${userMessage}"`);
 
-    const systemInstruction = `
-        You are a very kind, patient, and knowledgeable assistant for my grandmother. 
-        Your name is "Grandma's Helper".
-        Always answer in simple, clear, and encouraging language. 
-        Keep your answers concise and easy to understand.
-        If she asks about a person, place, or event, give a brief, interesting summary.
-        IMPORTANT: My grandmother sometimes misspells words. If you detect a spelling mistake,
-        do not point it out. Instead, understand what she meant and answer her question
-        as if she had spelled it perfectly. Your main goal is to be helpful and warm.
-    `;
-
-    // Format the incoming history for the Gemini API
-    // We also enforce the limit on the backend as a safety measure
+    // ====================================================================
+    // --- REVISION 3: Refactor the Chat Logic ---
+    // This new logic uses the SDK's built-in chat history management. It's
+    // cleaner and the intended way to hold a conversation.
+    // ====================================================================
+    
+    // First, we must format the history from our frontend to match what the SDK expects.
+    // Frontend sends: { role: 'user', message: '...' }
+    // SDK expects:   { role: 'user', parts: [{ text: '...' }] }
     const formattedHistory = history.slice(-10).map(item => ({
-        role: item.role, // 'user' or 'model'
+        role: item.role,
         parts: [{ text: item.message }]
     }));
 
-    // Construct the full payload for the model
-    const fullPrompt = [
-        systemInstruction,
-        ...formattedHistory, // Spread the formatted history items
-        userMessage         // The latest message from the user
-    ];
-
-    const result = await model.generateContent(fullPrompt);
+    // Start a new chat session with the model, providing the past conversation.
+    const chat = model.startChat({
+        history: formattedHistory,
+    });
+    
+    // Send only the user's *newest* message to continue the conversation.
+    const result = await chat.sendMessage(userMessage);
     const response = await result.response;
     const text = response.text();
 
     logger.info(`Response to IP: ${req.ip} | Answer: "${text.substring(0, 500)}..."`);
-    // We log a substring to keep the logs from getting excessively long.
-
     res.json({ message: text });
 
   } catch (error) {
