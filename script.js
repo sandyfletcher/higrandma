@@ -26,16 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatContainer = document.getElementById('chat-container');
-const submitButton = document.querySelector('#chat-form button'); // Get the button element
+const submitButton = document.querySelector('#chat-form button');
 let conversationHistory = [];
-let pressTimer; // Variable to hold the timer for the button press
+let pressTimer; // hold timer for button press
 
-// --- 1. PREVENT ENTER KEY SUBMISSION ---
-// Listen for key presses on the input field
+// --- Prevent Enter Key Submission ---
 chatInput.addEventListener('keydown', (e) => {
-    // If the key is 'Enter', prevent the default form submission action
     if (e.key === 'Enter') {
-        e.preventDefault();
+        e.preventDefault(); // stop form from submitting
     }
 });
 
@@ -45,11 +43,9 @@ function formatMessage(text) {
     formattedText = formattedText.replace(/\n/g, '<br>');
     return formattedText;
 }
-// handles adding formatted messages to the chat
 function addMessage(sender, message, isFormatted = false) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('chat-message', `${sender}-message`);
-    // if message is already HTML, use .innerHTML. Otherwise, use .textContent.
     if (isFormatted) {
         messageElement.innerHTML = message;
     } else {
@@ -57,40 +53,39 @@ function addMessage(sender, message, isFormatted = false) {
     }
     chatContainer.appendChild(messageElement);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    return messageElement; // return element to update it
+    return messageElement;
 }
 
-// --- This is the core logic that sends the message to the backend ---
-async function handleSubmission() {
+async function handleSubmission() { // logic to send message
     const userMessage = chatInput.value.trim();
     if (!userMessage) return;
-    
+    // 1a. add user's message to visible chat
     addMessage('user', userMessage);
+    // 1b. add raw user message to history
     conversationHistory.push({ role: 'user', message: userMessage });
-    
+    // 2. add a loading indicator for Gemini's response
     const loadingMessageElement = addMessage('gemini', "Grandma's Helper is thinking...");
     loadingMessageElement.classList.add('loading');
-    
     chatInput.value = '';
-    
     try {
         const response = await fetch('https://higrandma.onrender.com/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ conversation: conversationHistory }),
         });
-
         if (!response.ok) {
             const errorData = await response.json().catch(() => null);
             throw new Error(errorData?.message || 'Network response was not ok');
         }
         const data = await response.json();
+        // 4a. format raw message from Gemini into HTML
         const formattedGeminiMessage = formatMessage(data.message);
-        
+        // 4b. update loading message with formatted AI response
         loadingMessageElement.innerHTML = formattedGeminiMessage;
         loadingMessageElement.classList.remove('loading');
-        
+        // 4c. add AI's RAW (unformatted) response to our history
         conversationHistory.push({ role: 'model', message: data.message });
+        // 4d. enforce history limit (e.g., last 5 pairs = 10 messages)
         if (conversationHistory.length > 10) {
             conversationHistory.splice(0, 2);
         }
@@ -102,31 +97,23 @@ async function handleSubmission() {
     }
 }
 
-// --- 2. HOLD-TO-SUBMIT BUTTON LOGIC ---
-
-// When the user presses the button down
+// --- Button Logic ---
 submitButton.addEventListener('mousedown', () => {
-    // Start the visual "charging" animation
     submitButton.classList.add('charging');
-    // Set a timer for 1 second (1000 milliseconds)
     pressTimer = setTimeout(() => {
-        handleSubmission(); // If the timer completes, run the submission logic
-        submitButton.classList.remove('charging'); // Reset the visual
+        handleSubmission(); 
+        submitButton.classList.remove('charging'); 
     }, 1000);
 });
-
-// A function to cancel the submission timer
+// if user releases button or moves mouse, cancel timer
 const cancelHold = () => {
     clearTimeout(pressTimer);
-    submitButton.classList.remove('charging'); // Stop the visual "charging"
+    submitButton.classList.remove('charging');
 };
-
-// If the user releases the mouse button or moves the cursor off the button, cancel the hold
 submitButton.addEventListener('mouseup', cancelHold);
 submitButton.addEventListener('mouseleave', cancelHold);
 
-// Finally, prevent the form's default 'submit' event entirely,
-// as we are now handling everything with our custom button logic.
+// Prevent the default form submission, since we handle it manually
 chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
 });

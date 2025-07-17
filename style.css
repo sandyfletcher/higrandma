@@ -1,3 +1,9 @@
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/assets/AtkinsonHyperlegible-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
 /* --- Base Styles --- */
 html {
     font-size: 16px;
@@ -127,6 +133,8 @@ header p {
     border-color: #4299e1;
     box-shadow: 0 0 0 2px #bee3f8;
 }
+
+/* ---  Button Style --- */
 #chat-form button {
     padding: 15px 25px;
     border: none;
@@ -136,36 +144,20 @@ header p {
     font-weight: bold;
     border-radius: 30px;
     cursor: pointer;
-    transition: background-color 0.2s;
-    /* --- Styles for Hold-to-Submit --- */
-    position: relative; /* This is crucial for positioning the pseudo-element */
-    overflow: hidden; /* This keeps the charging bar inside the button's rounded corners */
-    -webkit-tap-highlight-color: transparent; /* Improves experience on touch devices */
+    -webkit-tap-highlight-color: transparent;
+    /* 1. Define the gradient that will be revealed. It's orange on the left, blue on the right. */
+    background-image: linear-gradient(to right, #f6ad55 50%, #2b6cb0 50%);
+    /* 2. Make the background twice as wide as the button itself. */
+    background-size: 200% 100%;
+    /* 3. Shift the background to the right, so only the blue part is visible initially. */
+    background-position: 100% 0;
+    /* 4. Set the transition for the background-position. This is our 1-second animation! */
+    transition: background-position 1s linear, background-color 0.2s;
 }
-
 #chat-form button:hover {
-    background-color: #3182ce;
+    background-color: #3182ce; /* Standard hover effect remains */
 }
-
-/* This is the pseudo-element that will act as our "charging up" bar. */
-#chat-form button::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 0; /* It starts with 0 width */
-    height: 100%;
-    background-color: #4299e1; /* A slightly lighter blue for the fill effect */
-    transition: width 1s linear; /* The animation: expand width over 1 second */
-}
-
-/* When the .charging class is added via JS, the ::before element will expand to 100% width */
-#chat-form button.charging::before {
-    width: 100%;
-}
-
-/* The button's text needs to appear on top of the charging bar.
-   Setting its position to relative creates a new stacking context. */
-#chat-form button span {
-    position: relative;
+#chat-form button.charging {
+    /* When .charging is added, slide the background to the left, revealing the orange part. */
+    background-position: 0 0;
 }
