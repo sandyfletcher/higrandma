@@ -26,7 +26,18 @@ document.addEventListener('DOMContentLoaded', () => {
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatContainer = document.getElementById('chat-container');
+const submitButton = document.querySelector('#chat-form button'); // Get the button element
 let conversationHistory = [];
+let pressTimer; // Variable to hold the timer for the button press
+
+// --- 1. PREVENT ENTER KEY SUBMISSION ---
+// Listen for key presses on the input field
+chatInput.addEventListener('keydown', (e) => {
+    // If the key is 'Enter', prevent the default form submission action
+    if (e.key === 'Enter') {
+        e.preventDefault();
+    }
+});
 
 function formatMessage(text) {
     let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
@@ -48,19 +59,20 @@ function addMessage(sender, message, isFormatted = false) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
     return messageElement; // return element to update it
 }
-// handle form submission
-chatForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+
+// --- This is the core logic that sends the message to the backend ---
+async function handleSubmission() {
     const userMessage = chatInput.value.trim();
     if (!userMessage) return;
-    // 1a. add user's message to visible chat (unformatted for now)
-    const userMessageElement = addMessage('user', userMessage);
-    // 1b. add raw user message to history
+    
+    addMessage('user', userMessage);
     conversationHistory.push({ role: 'user', message: userMessage });
-    // 2. add a loading indicator for Gemini's response
+    
     const loadingMessageElement = addMessage('gemini', "Grandma's Helper is thinking...");
     loadingMessageElement.classList.add('loading');
+    
     chatInput.value = '';
+    
     try {
         const response = await fetch('https://higrandma.onrender.com/chat', {
             method: 'POST',
@@ -73,14 +85,12 @@ chatForm.addEventListener('submit', async (e) => {
             throw new Error(errorData?.message || 'Network response was not ok');
         }
         const data = await response.json();
-        // 4a. format raw message from Gemini into HTML
         const formattedGeminiMessage = formatMessage(data.message);
-        // 4b. update loading message with formatted AI response
+        
         loadingMessageElement.innerHTML = formattedGeminiMessage;
         loadingMessageElement.classList.remove('loading');
-        // 4c. add AI's RAW (unformatted) response to our history
+        
         conversationHistory.push({ role: 'model', message: data.message });
-        // 4d. enforce history limit (e.g., last 5 pairs = 10 messages)
         if (conversationHistory.length > 10) {
             conversationHistory.splice(0, 2);
         }
@@ -90,4 +100,33 @@ chatForm.addEventListener('submit', async (e) => {
         loadingMessageElement.classList.remove('loading');
         loadingMessageElement.style.color = 'red';
     }
+}
+
+// --- 2. HOLD-TO-SUBMIT BUTTON LOGIC ---
+
+// When the user presses the button down
+submitButton.addEventListener('mousedown', () => {
+    // Start the visual "charging" animation
+    submitButton.classList.add('charging');
+    // Set a timer for 1 second (1000 milliseconds)
+    pressTimer = setTimeout(() => {
+        handleSubmission(); // If the timer completes, run the submission logic
+        submitButton.classList.remove('charging'); // Reset the visual
+    }, 1000);
+});
+
+// A function to cancel the submission timer
+const cancelHold = () => {
+    clearTimeout(pressTimer);
+    submitButton.classList.remove('charging'); // Stop the visual "charging"
+};
+
+// If the user releases the mouse button or moves the cursor off the button, cancel the hold
+submitButton.addEventListener('mouseup', cancelHold);
+submitButton.addEventListener('mouseleave', cancelHold);
+
+// Finally, prevent the form's default 'submit' event entirely,
+// as we are now handling everything with our custom button logic.
+chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
 });
